@@ -1,0 +1,15 @@
+/ {
+    chosen {
+        zephyr,console = &uart0;
+    };
+    
+    aliases {
+        led0 = &led_red;
+    };
+
+    leds {
+        led_red: led_red {
+            gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
+        };
+    };
+};
