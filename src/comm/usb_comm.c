@@ -61,7 +61,7 @@ static void interrupt_handler(const struct device *dev, void *user_data)
 				LOG_ERR("Drop %u bytes", recv_len - rb_len);
 			}
 
-			LOG_DBG("tty fifo -> ringbuf %d bytes", rb_len);
+			//LOG_DBG("tty fifo -> ringbuf %d bytes", rb_len);
 		}
 	}
 }
@@ -94,21 +94,76 @@ int usb_comm_init(void)
     return 0;
 }
 
+static uint16_t crc16_ccitt(const uint8_t *data, size_t length) {
+    uint16_t crc = 0xFFFF;
+    uint16_t polynomial = 0xA001;
+
+    for (size_t i = 0; i < length; ++i) {
+        crc ^= (uint16_t)data[i];
+
+        for (size_t j = 0; j < 8; ++j) {
+            if (crc & 0x0001) {
+                crc = (crc >> 1) ^ polynomial;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+
+    return crc;
+}
+
+#define	DATA_COMPLETE_OFFSET(len)	(9 + len)
+#define	FC_CODE_OFFSET		4
 
 void usb_comm_process(void)
 {
-    size_t avail = ring_buf_size_get(&ringbuf);
-    if (avail > 0) {
-        uint8_t buffer[64];
-        int rb_len;
+	int rx_index = 0;
+	int len = 0;
+	uint8_t buffer[64] = {0};
+	uint16_t cmd;
+	uint16_t cs;
+	uint8_t func_code;
 
-        rb_len = ring_buf_get(&ringbuf, buffer, sizeof(buffer));
-        if (!rb_len) {
-            //LOG_DBG("Ring buffer empty, disable TX IRQ");
-        }
+	while (ring_buf_size_get(&ringbuf) > 0)
+	{
+		char temp = 0;
+		ring_buf_get(&ringbuf, &temp, 1);
 
-        for(int i = 0; i < rb_len; i++) {
-            printk("%c ", buffer[i]);
-        }
-    }
+		buffer[rx_index] = temp;
+		/** check header */
+		if (rx_index == 0) {
+			if (temp == COM_HEADER_1ST) rx_index = 1; else rx_index = 0; 
+		} else if (rx_index == 1) {
+			if (temp == COM_HEADER_2ND) rx_index = 2; else rx_index = 0;
+		} else if (rx_index == 2) {
+			if (temp == COM_HEADER_3RD) rx_index = 3; else rx_index = 0;
+		} else if (rx_index == 3) {
+			if (temp == COM_HEADER_4TH) rx_index = 4; else rx_index = 0;
+		} else {
+			
+			/** get data len and command/reg */
+			if (rx_index == 7) {
+				func_code = buffer[0];
+				len = buffer[5];
+				cmd = (buffer[6] << 8) | (buffer[7] & 0xff);
+
+			} else if (rx_index >= (DATA_COMPLETE_OFFSET(len)) ) {
+				cs = (buffer[DATA_COMPLETE_OFFSET(len)-1] << 8) | buffer[DATA_COMPLETE_OFFSET(len)];
+				printk("[%04X] [%04X]\n", cs, crc16_ccitt(buffer, (DATA_COMPLETE_OFFSET(len)-1)));
+				if (cs == crc16_ccitt(buffer, (DATA_COMPLETE_OFFSET(len)-1))){
+					printk("CS OK\n");
+				}
+				//printk("CS: %04X", cs);
+				// set global data buffer from buffer
+				printk("Do process data: ");
+				for(int i = 0; i < len; i++) {
+					printk("%d ", buffer[8 + i]);
+				}
+				printk("Done!\n");
+				rx_index = 0;	// reset rx index
+			}
+			rx_index++;
+		}
+	}
 }
