@@ -51,6 +51,7 @@ int main(void)
 	struct priv_data data;
 	int ret;
 	struct gpio_dt_spec led_dev = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+	uint32_t count = 0;
 
 	if (!gpio_is_ready_dt(&led_dev)) {
 		LOG_ERR("Failed to get GPIO DT!\n");
@@ -77,6 +78,11 @@ int main(void)
 	{
 		usb_comm_process();
 		k_msleep(10);
+		if (count > 100) {
+			count = 0;
+			data.counter = (data.counter + 1) % 100;
+			usb_comm_send(0x01, 0x1234, &data.counter, 1);
+		}
 	}
 
 	return 0;

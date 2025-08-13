@@ -90,6 +90,7 @@ int usb_comm_init(void)
 
 	/* Enable rx interrupts */
 	uart_irq_rx_enable(uart_dev);
+	// uart_irq_tx_enable(uart_dev);
 
     return 0;
 }
@@ -111,6 +112,60 @@ static uint16_t crc16_ccitt(const uint8_t *data, size_t length) {
     }
 
     return crc;
+}
+
+/**
+ * send modbus rtu formatted protocol
+ */
+int usb_comm_send(
+	uint16_t fc_code, 
+	uint16_t reg, 
+	uint8_t *data, 
+	uint8_t len)
+{
+	uint8_t buffer[64];
+	uint16_t checksum;
+
+	/** send header first */
+	buffer[0] = COM_HEADER_1ST;
+	buffer[1] = COM_HEADER_2ND;
+	buffer[2] = COM_HEADER_3RD;
+	buffer[3] = COM_HEADER_4TH;
+
+	buffer[4] = fc_code;
+	buffer[5] = len;
+	buffer[6] = (reg >> 8) & 0xff;
+	buffer[7] = reg & 0xff;
+
+	if (len > 0) {
+		for (int i = 0; i < len; i++) {
+			buffer[8 + i] = data[i];
+		}
+	}
+
+	checksum = crc16_ccitt(buffer, len + 8);
+
+	// set checksum word
+	buffer[8 + len] = (checksum>>8) & 0xff;
+	buffer[9 + len] = checksum & 0xff;
+
+	//for (int i = 0; i < (len + 9); i += 1) {
+		uart_tx(uart_dev, buffer, (len + 9), 100);
+	//}
+	// uart_fifo_fill(uart_dev, buffer, 9 + len);
+}
+
+static int process_data(uint16_t fc_code, uint16_t reg, uint8_t *data)
+{
+	switch (fc_code) {
+		default: break;
+		case FC_CODE_READ:
+
+			break;
+		case FC_CODE_WRITE:
+
+			break;
+	}
 }
 
 #define	DATA_COMPLETE_OFFSET(len)	(9 + len)
@@ -156,11 +211,12 @@ void usb_comm_process(void)
 				}
 				//printk("CS: %04X", cs);
 				// set global data buffer from buffer
-				printk("Do process data: ");
+				/*printk("Do process data: ");
 				for(int i = 0; i < len; i++) {
 					printk("%d ", buffer[8 + i]);
 				}
-				printk("Done!\n");
+				printk("Done!\n");*/
+				process_data(func_code, cmd, buffer[8]);
 				rx_index = 0;	// reset rx index
 			}
 			rx_index++;

@@ -6,9 +6,13 @@
 #define COM_HEADER_3RD  0x34
 #define COM_HEADER_4TH  0x76
 
+#define FC_CODE_WRITE   0x0
+#define FC_CODE_READ    0x1
+
 /* function prototype */
 int usb_comm_init(void);
 void usb_comm_process(void);
+int usb_comm_send(uint16_t fc_code, uint16_t reg, uint8_t *data, uint8_t len);
 /* end of function prototype */
 
 #endif
