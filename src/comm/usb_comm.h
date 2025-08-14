@@ -6,8 +6,12 @@
 #define COM_HEADER_3RD  0x34
 #define COM_HEADER_4TH  0x76
 
-#define FC_CODE_WRITE   0x0
-#define FC_CODE_READ    0x1
+#define FUNCTION_CODE_WRITE 0x06
+#define FUNCTION_CODE_READ  0x03
+
+// read
+#define ADDR_REG_HANDSHAKE  0x0000
+#define ADDR_REG_SET_LED    0x0001
 
 /* function prototype */
 int usb_comm_init(void);

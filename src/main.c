@@ -78,7 +78,7 @@ int main(void)
 	{
 		usb_comm_process();
 		k_msleep(10);
-		if (count > 100) {
+		if (count++ > 100) {
 			count = 0;
 			data.counter = (data.counter + 1) % 100;
 			usb_comm_send(0x01, 0x1234, &data.counter, 1);

@@ -149,27 +149,56 @@ int usb_comm_send(
 	buffer[8 + len] = (checksum>>8) & 0xff;
 	buffer[9 + len] = checksum & 0xff;
 
-	//for (int i = 0; i < (len + 9); i += 1) {
-		uart_tx(uart_dev, buffer, (len + 9), 100);
-	//}
-	// uart_fifo_fill(uart_dev, buffer, 9 + len);
+	uart_fifo_fill(uart_dev, buffer, 10 + len);
+}
+
+static void parse_fc_code_read(uint16_t reg, uint8_t *data)
+{
+	uint8_t buff[10];
+
+	switch (reg) {
+		case ADDR_REG_HANDSHAKE:
+			buff[0] = 0xde;
+			buff[1] = 0xad;
+			buff[2] = 0xc0;
+			buff[3] = 0xde;
+			usb_comm_send(FUNCTION_CODE_WRITE, ADDR_REG_HANDSHAKE, buff, 4);
+			break;
+	}
+}
+
+static void parse_fc_code_write(uint16_t reg, uint8_t *data)
+{
+	uint8_t temp = 0;
+
+	switch (reg) {
+		default: break;
+		case ADDR_REG_SET_LED:
+			temp = data[0];
+			if (!temp) {
+
+			} else {
+
+			}	
+			break;
+	}
 }
 
 static int process_data(uint16_t fc_code, uint16_t reg, uint8_t *data)
 {
 	switch (fc_code) {
 		default: break;
-		case FC_CODE_READ:
-
+		case FUNCTION_CODE_READ:
+			parse_fc_code_read(reg, data);
 			break;
-		case FC_CODE_WRITE:
-
+		case FUNCTION_CODE_WRITE:
+			parse_fc_code_write(reg, data);
 			break;
 	}
 }
 
 #define	DATA_COMPLETE_OFFSET(len)	(9 + len)
-#define	FC_CODE_OFFSET		4
+#define	FC_CODE_OFFSET				(4)
 
 void usb_comm_process(void)
 {
@@ -199,24 +228,18 @@ void usb_comm_process(void)
 			
 			/** get data len and command/reg */
 			if (rx_index == 7) {
-				func_code = buffer[0];
+				func_code = buffer[4];
 				len = buffer[5];
 				cmd = (buffer[6] << 8) | (buffer[7] & 0xff);
 
 			} else if (rx_index >= (DATA_COMPLETE_OFFSET(len)) ) {
 				cs = (buffer[DATA_COMPLETE_OFFSET(len)-1] << 8) | buffer[DATA_COMPLETE_OFFSET(len)];
-				printk("[%04X] [%04X]\n", cs, crc16_ccitt(buffer, (DATA_COMPLETE_OFFSET(len)-1)));
+				//printk("[%04X] [%04X]\n", cs, crc16_ccitt(buffer, (DATA_COMPLETE_OFFSET(len)-1)));
 				if (cs == crc16_ccitt(buffer, (DATA_COMPLETE_OFFSET(len)-1))){
-					printk("CS OK\n");
+					//printk("CS OK\n");
+					process_data(func_code, cmd, buffer[8]);
 				}
-				//printk("CS: %04X", cs);
-				// set global data buffer from buffer
-				/*printk("Do process data: ");
-				for(int i = 0; i < len; i++) {
-					printk("%d ", buffer[8 + i]);
-				}
-				printk("Done!\n");*/
-				process_data(func_code, cmd, buffer[8]);
+				
 				rx_index = 0;	// reset rx index
 			}
 			rx_index++;
