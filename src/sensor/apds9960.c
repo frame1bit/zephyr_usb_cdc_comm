@@ -64,15 +64,17 @@ struct apds_data apds9960_read(void)
 #ifdef CONFIG_APDS9960_TRIGGER
 	k_sem_take(&sem, K_FOREVER);
 #else
-	//k_sleep(K_MSEC(250));
+	//k_sleep(K_MSEC(100));
 #endif
-
+	int64_t start = k_uptime_get();
     if (sensor_sample_fetch(apds.dev)) {
         LOG_ERR("sensor_sample fetch failed\n");
     }
-
+	
     sensor_channel_get(apds.dev, SENSOR_CHAN_LIGHT, &data.intensity);
 	sensor_channel_get(apds.dev, SENSOR_CHAN_PROX, &data.prox);
-
+	int64_t end = k_uptime_get();
+	data.process_time = (end - start);
+	//data.intensity.val1 = sensor_sample_fetch_chan(apds.dev, SENSOR_CHAN_LIGHT);
     return data;
 }

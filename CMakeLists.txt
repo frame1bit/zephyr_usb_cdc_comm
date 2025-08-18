@@ -11,13 +11,16 @@ FILE(GLOB app_sources
     src/*.c
     src/comm/*.c
     src/user_app/*.c
-    src/sensor/*.c
 )
+
+if(CONFIG_APDS9960)
+    target_sources(app PRIVATE src/sensor/apds9960.c)
+    include_directories(app PRIVATE src/sensor)
+endif()
 
 target_sources(app PRIVATE ${app_sources})
 
 include_directories(app PRIVATE
     src/comm
     src/user_app
-    src/sensor
 )

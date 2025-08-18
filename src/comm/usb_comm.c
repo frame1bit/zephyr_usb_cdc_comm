@@ -16,10 +16,17 @@ LOG_MODULE_REGISTER(usb_comm, LOG_LEVEL_DBG);
 const struct device *const uart_dev = DEVICE_DT_GET_ONE(zephyr_cdc_acm_uart);
 
 #define RING_BUF_SIZE 1024
+#define TX_BUFFER_SIZE 128
 uint8_t ring_buffer[RING_BUF_SIZE];
 
 struct ring_buf ringbuf;
 static uint8_t usb_status, handshake_status=false;
+
+static uint8_t tx_buffer[TX_BUFFER_SIZE];
+static size_t tx_length = 0;
+static size_t tx_index = 0;
+static bool tx_ongoing = false;
+
 
 uint8_t usb_comm_get_handshake_status(void)
 {
@@ -38,12 +45,15 @@ static void usb_comm_status_cb(enum usb_dc_status_code status, const uint8_t *pa
         break;
     case USB_DC_CONFIGURED:
         printk("USB configured\n");
+		//handshake_status = false;
         break;
     case USB_DC_SUSPEND:
         printk("USB suspended\n");
+		//handshake_status = false;
         break;
     case USB_DC_RESUME:
         printk("USB resumed\n");
+		//handshake_status = false;
         break;
     default:
         break;
@@ -96,6 +106,17 @@ static void interrupt_handler(const struct device *dev, void *user_data)
 
 			//LOG_DBG("tty fifo -> ringbuf %d bytes", rb_len);
 		}
+
+		// tx handling
+		if (uart_irq_tx_ready(dev) && tx_ongoing) {
+			uart_fifo_fill(dev, &tx_buffer[tx_index], 1);
+			tx_index++;
+
+			if (tx_index >= tx_length) {
+				uart_irq_tx_disable(dev);
+				tx_ongoing = false;
+			}
+		}
 	}
 }
 
@@ -123,7 +144,8 @@ int usb_comm_init(void)
 
 	/* Enable rx interrupts */
 	uart_irq_rx_enable(uart_dev);
-	// uart_irq_tx_enable(uart_dev);
+	//uart_irq_tx_enable(uart_dev);
+	uart_irq_tx_disable(uart_dev);
 
     return 0;
 }
@@ -158,10 +180,12 @@ int usb_comm_send(
 {
 	uint8_t buffer[64];
 	uint16_t checksum;
+	size_t packet_len = 10 + len;
 
-	// if (usb_status != USB_DC_CONNECTED) {
-	// 	return -1;
-	// }
+	if (len > 50 || packet_len > sizeof(buffer)) {
+		return -EMSGSIZE;
+	}
+	
 
 	/** send header first */
 	buffer[0] = COM_HEADER_1ST;
@@ -186,8 +210,26 @@ int usb_comm_send(
 	buffer[8 + len] = (checksum>>8) & 0xff;
 	buffer[9 + len] = checksum & 0xff;
 
-	uart_fifo_fill(uart_dev, buffer, 10 + len);
+	if (packet_len > TX_BUFFER_SIZE) {
+		return -ENOMEM;
+	}
 
+	while (tx_ongoing) {
+		k_yield();
+	}
+
+	memcpy(tx_buffer, buffer, packet_len);
+	tx_length = packet_len;
+	tx_index = 0;
+	tx_ongoing = true;
+
+	uart_irq_tx_enable(uart_dev);
+	#if 0
+	//uart_fifo_fill(uart_dev, buffer, 10 + len);
+	for (int i = 0; i < (10 + len); i++) {
+		uart_poll_out(uart_dev, buffer[i]);
+	}
+	#endif
 	return 0;
 }
 
@@ -197,7 +239,7 @@ static void parse_fc_code_read(uint16_t reg, uint8_t *data)
 
 	switch (reg) {
 		case ADDR_REG_HANDSHAKE:
-			//printk("Handshake");
+			printk("HS Received.\n");
 			buff[0] = 0xde;
 			buff[1] = 0xad;
 			buff[2] = 0xc0;

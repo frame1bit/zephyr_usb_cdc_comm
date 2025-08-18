@@ -10,6 +10,7 @@
 struct apds_data {
     struct sensor_value intensity;
     struct sensor_value prox;
+    int process_time;
 };
 
 struct sensor_data {
