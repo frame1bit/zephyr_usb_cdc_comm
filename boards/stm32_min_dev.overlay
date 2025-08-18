@@ -1,12 +1,16 @@
 / {
 	leds {
-		led: led {
+		ledblue: ledblue {
 			gpios = <&gpioa 1 GPIO_ACTIVE_HIGH>;
+		};
+		ledred: ledred {
+			gpios = <&gpioa 0 GPIO_ACTIVE_HIGH>;
 		};
 	};
 
 	aliases {
-		led0 = &led;
+		led0 = &ledblue;
+		led1 = &ledred;
 	};
 };
 

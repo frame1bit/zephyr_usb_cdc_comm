@@ -8,6 +8,7 @@
 #include <zephyr/usb/usbd.h>
 #include <zephyr/logging/log.h>
 #include "usb_comm.h"
+#include "msg_app.h"
 
 LOG_MODULE_REGISTER(usb_comm, LOG_LEVEL_DBG);
 
@@ -18,6 +19,38 @@ const struct device *const uart_dev = DEVICE_DT_GET_ONE(zephyr_cdc_acm_uart);
 uint8_t ring_buffer[RING_BUF_SIZE];
 
 struct ring_buf ringbuf;
+static uint8_t usb_status, handshake_status=false;
+
+uint8_t usb_comm_get_handshake_status(void)
+{
+	return handshake_status;
+}
+
+static void usb_comm_status_cb(enum usb_dc_status_code status, const uint8_t *param)
+{
+    switch (status) {
+    case USB_DC_CONNECTED:
+        printk("USB connected\n");
+        break;
+    case USB_DC_DISCONNECTED:
+        printk("USB disconnected\n");
+		handshake_status = false;
+        break;
+    case USB_DC_CONFIGURED:
+        printk("USB configured\n");
+        break;
+    case USB_DC_SUSPEND:
+        printk("USB suspended\n");
+        break;
+    case USB_DC_RESUME:
+        printk("USB resumed\n");
+        break;
+    default:
+        break;
+    }
+
+	usb_status = status;
+}
 
 static inline void print_baudrate(const struct device *dev)
 {
@@ -75,7 +108,7 @@ int usb_comm_init(void)
 		return 1;
 	}
 
-	ret = usb_enable(NULL);
+	ret = usb_enable(usb_comm_status_cb);
     if (ret != 0) {
 		LOG_ERR("Failed to enable USB");
 		return 1;
@@ -126,6 +159,10 @@ int usb_comm_send(
 	uint8_t buffer[64];
 	uint16_t checksum;
 
+	// if (usb_status != USB_DC_CONNECTED) {
+	// 	return -1;
+	// }
+
 	/** send header first */
 	buffer[0] = COM_HEADER_1ST;
 	buffer[1] = COM_HEADER_2ND;
@@ -150,6 +187,8 @@ int usb_comm_send(
 	buffer[9 + len] = checksum & 0xff;
 
 	uart_fifo_fill(uart_dev, buffer, 10 + len);
+
+	return 0;
 }
 
 static void parse_fc_code_read(uint16_t reg, uint8_t *data)
@@ -158,11 +197,13 @@ static void parse_fc_code_read(uint16_t reg, uint8_t *data)
 
 	switch (reg) {
 		case ADDR_REG_HANDSHAKE:
+			//printk("Handshake");
 			buff[0] = 0xde;
 			buff[1] = 0xad;
 			buff[2] = 0xc0;
 			buff[3] = 0xde;
-			usb_comm_send(FUNCTION_CODE_WRITE, ADDR_REG_HANDSHAKE, buff, 4);
+			usb_comm_send(FUNCTION_CODE_READ, ADDR_REG_HANDSHAKE, buff, 4);
+			handshake_status = true;
 			break;
 	}
 }
@@ -170,15 +211,18 @@ static void parse_fc_code_read(uint16_t reg, uint8_t *data)
 static void parse_fc_code_write(uint16_t reg, uint8_t *data)
 {
 	uint8_t temp = 0;
+	uint8_t _data = 0;
 
 	switch (reg) {
 		default: break;
 		case ADDR_REG_SET_LED:
 			temp = data[0];
 			if (!temp) {
-
+				_data = 0;
+				msg_app_send(MSG_SET_LED, &_data, 1);
 			} else {
-
+				_data = 1;
+				msg_app_send(MSG_SET_LED, &_data, 1);
 			}	
 			break;
 	}
@@ -214,7 +258,9 @@ void usb_comm_process(void)
 		char temp = 0;
 		ring_buf_get(&ringbuf, &temp, 1);
 
+		if (rx_index > sizeof(buffer)) rx_index = 0;
 		buffer[rx_index] = temp;
+
 		/** check header */
 		if (rx_index == 0) {
 			if (temp == COM_HEADER_1ST) rx_index = 1; else rx_index = 0; 
@@ -237,7 +283,7 @@ void usb_comm_process(void)
 				//printk("[%04X] [%04X]\n", cs, crc16_ccitt(buffer, (DATA_COMPLETE_OFFSET(len)-1)));
 				if (cs == crc16_ccitt(buffer, (DATA_COMPLETE_OFFSET(len)-1))){
 					//printk("CS OK\n");
-					process_data(func_code, cmd, buffer[8]);
+					process_data(func_code, cmd, &buffer[8]);
 				}
 				
 				rx_index = 0;	// reset rx index

@@ -10,13 +10,17 @@
 #define FUNCTION_CODE_READ  0x03
 
 // read
-#define ADDR_REG_HANDSHAKE  0x0000
-#define ADDR_REG_SET_LED    0x0001
+#define ADDR_REG_HANDSHAKE      0x0000
+#define ADDR_REG_COUNTER        0x0001
+#define ADDR_REG_SENSOR_APDS    0x0002
+
+#define ADDR_REG_SET_LED    0x0002
 
 /* function prototype */
 int usb_comm_init(void);
 void usb_comm_process(void);
 int usb_comm_send(uint16_t fc_code, uint16_t reg, uint8_t *data, uint8_t len);
+uint8_t usb_comm_get_handshake_status(void);
 /* end of function prototype */
 
 #endif

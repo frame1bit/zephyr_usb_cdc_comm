@@ -25,24 +25,27 @@
 #include <zephyr/usb/usbd.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/gpio.h>
+
 #include "usb_comm.h"
+#include "sys_app.h"
+
+#ifdef CONFIG_APDS9960
+#include "apds9960.h"
+#endif
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
-
-#define	LED0_NODE	DT_ALIAS(led0)
-
-struct priv_data {
-	uint32_t counter;
-	struct gpio_dt_spec *led_dev
-};
+#define	LEDBLUE_NODE	DT_ALIAS(led0)
+#define	LEDRED_NODE		DT_ALIAS(led1)
 
 void timer_tick_cb(struct k_timer *timer)
 {
 	struct priv_data *data = k_timer_user_data_get(timer); 
-	gpio_pin_toggle_dt(data->led_dev);
+	gpio_pin_toggle_dt(data->led_blue);
+	// gpio_pin_toggle_dt(data->led_red);
 }
 
+static struct priv_data data;
 
 K_TIMER_DEFINE(timerTick, timer_tick_cb, NULL);
 
@@ -50,17 +53,22 @@ int main(void)
 {
 	struct priv_data data;
 	int ret;
-	struct gpio_dt_spec led_dev = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
-	uint32_t count = 0;
+	struct gpio_dt_spec led_blue = GPIO_DT_SPEC_GET(LEDBLUE_NODE, gpios);
+	struct gpio_dt_spec led_red = GPIO_DT_SPEC_GET(LEDRED_NODE, gpios);
 
-	if (!gpio_is_ready_dt(&led_dev)) {
+	if (!gpio_is_ready_dt(&led_blue)) {
 		LOG_ERR("Failed to get GPIO DT!\n");
 		return 1;
 	}
 
-	data.led_dev = &led_dev;
+	data.led_blue = &led_blue;
+	data.led_red = &led_red;
 
-	ret = gpio_pin_configure_dt(&led_dev, GPIO_OUTPUT_ACTIVE);
+	ret = gpio_pin_configure_dt(&led_blue, GPIO_OUTPUT_ACTIVE);
+	if (ret < 0) {
+		return 1;
+	}
+	ret = gpio_pin_configure_dt(&led_red, GPIO_OUTPUT_ACTIVE);
 	if (ret < 0) {
 		return 1;
 	}
@@ -74,15 +82,18 @@ int main(void)
 	k_timer_user_data_set(&timerTick, &data);
 	k_timer_start(&timerTick, K_MSEC(500), K_MSEC(500));
 
+#ifdef CONFIG_APDS9960
+	ret = apds9960_init();
+	if (ret != 0) {
+		LOG_ERR("Failed to init apds sensor!\n");
+	}
+#endif
+
+	main_app_init(NULL);
+
 	while(true) 
 	{
-		usb_comm_process();
-		k_msleep(10);
-		if (count++ > 100) {
-			count = 0;
-			data.counter = (data.counter + 1) % 100;
-			usb_comm_send(0x01, 0x1234, &data.counter, 1);
-		}
+		main_app_run(&data);
 	}
 
 	return 0;

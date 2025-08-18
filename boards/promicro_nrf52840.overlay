@@ -5,11 +5,27 @@
     
     aliases {
         led0 = &led_red;
+        led1 = &led_blue;
     };
 
     leds {
         led_red: led_red {
             gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
         };
+
+        led_blue: led_blue {
+            gpios = <&gpio0 24 GPIO_ACTIVE_LOW>;
+        };
+    };
+};
+
+&i2c0 {
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+
+	apds_sensor: sensor@39 {
+        compatible = "avago,apds9960";
+        status = "okay";
+        reg = <0x39>;
+        int-gpios = <&gpio1 4 GPIO_ACTIVE_LOW>;
     };
 };

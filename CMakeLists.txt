@@ -10,10 +10,14 @@ include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
 FILE(GLOB app_sources 
     src/*.c
     src/comm/*.c
+    src/user_app/*.c
+    src/sensor/*.c
 )
 
 target_sources(app PRIVATE ${app_sources})
 
 include_directories(app PRIVATE
     src/comm
+    src/user_app
+    src/sensor
 )
